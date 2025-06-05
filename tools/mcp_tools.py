@@ -182,12 +182,6 @@ MCP_SERVERS = [
         "key": "fetch",
         "command": "uvx",
         "args": ["mcp-server-fetch"],
-    },
-    {
-        "name": "playwright",
-        "key": "playwright",
-        "command": "npx",
-        "args": ["@playwright/mcp@latest"],
     }
 ]
 
@@ -252,13 +246,17 @@ def write_mcp_json_from_servers(json_path=os.path.join(os.getcwd(), "mcp.json"))
                         break
                 if tool_path:
                     params["env"][env_var] = tool_path
+                else:
+                    value = input(f"Please set the environment variable {env_var} for {srv['name']}: ").strip()
+                    if value:
+                        params["env"][env_var] = value
             else:
-                value = input(f"Please set the environment variable {env_var} for {srv['name']}: ")
+                value = input(f"Please set the environment variable {env_var} for {srv['name']}: ").strip()
                 params["env"][env_var] = value
         # Add any extra env if present
         if "env_extra" in srv:
             params["env"].update(srv["env_extra"])
-        if tool_path or not exe_name:
+        if not exe_name or params["env"]:
             server_entry = {
                 "name": srv["name"],
                 "key": srv["key"],

@@ -1,6 +1,36 @@
 {
   "servers": [
     {
+      "name": "AlterX",
+      "key": "AlterX",
+      "params": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "gc-alterx-mcp"
+        ],
+        "env": {
+          "ALTERX_PATH": "C:\\Users\\user1\\go\\bin\\alterx.exe"
+        }
+      },
+      "cache_tools_list": true
+    },
+    {
+      "name": "Amass",
+      "key": "Amass",
+      "params": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "gc-amass-mcp"
+        ],
+        "env": {
+          "AMASS_PATH": "C:\\Users\\user1\\go\\bin\\amass.exe"
+        }
+      },
+      "cache_tools_list": true
+    },
+    {
       "name": "Arjun",
       "key": "Arjun",
       "params": {
@@ -29,6 +59,21 @@
       "cache_tools_list": true
     },
     {
+      "name": "FFUF Fuzzer",
+      "key": "FFUF",
+      "params": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "gc-ffuf-mcp"
+        ],
+        "env": {
+          "FFUF_PATH": "C:\\Users\\user1\\go\\bin\\ffuf.exe"
+        }
+      },
+      "cache_tools_list": true
+    },
+    {
       "name": "httpx",
       "key": "HTTPx",
       "params": {
@@ -44,24 +89,27 @@
       "cache_tools_list": true
     },
     {
+      "name": "SQLMap",
+      "key": "SQLMap",
+      "params": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "gc-sqlmap-mcp"
+        ],
+        "env": {
+          "SQLMAP_PATH": "C:\\Users\\user1\\Documents\\internship\\sqlmap-dev\\sqlmap.py"
+        }
+      },
+      "cache_tools_list": true
+    },
+    {
       "name": "fetch",
       "key": "fetch",
       "params": {
         "command": "uvx",
         "args": [
           "mcp-server-fetch"
-        ],
-        "env": {}
-      },
-      "cache_tools_list": true
-    },
-    {
-      "name": "playwright",
-      "key": "playwright",
-      "params": {
-        "command": "npx",
-        "args": [
-          "@playwright/mcp@latest"
         ],
         "env": {}
       },
