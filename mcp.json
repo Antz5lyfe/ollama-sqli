@@ -1,0 +1,71 @@
+{
+  "servers": [
+    {
+      "name": "Arjun",
+      "key": "Arjun",
+      "params": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "gc-arjun-mcp"
+        ],
+        "env": {
+          "ARJUN_PATH": "C:\\Users\\user1\\AppData\\Local\\Programs\\Python\\Python313\\Scripts\\arjun.exe"
+        }
+      },
+      "cache_tools_list": true
+    },
+    {
+      "name": "Certificate Transparency",
+      "key": "CrtSh",
+      "params": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "gc-crtsh-mcp"
+        ],
+        "env": {}
+      },
+      "cache_tools_list": true
+    },
+    {
+      "name": "httpx",
+      "key": "HTTPx",
+      "params": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "gc-httpx-mcp"
+        ],
+        "env": {
+          "HTTPX_PATH": "C:\\Users\\user1\\Documents\\internship\\project\\.venv\\Scripts\\httpx.exe"
+        }
+      },
+      "cache_tools_list": true
+    },
+    {
+      "name": "fetch",
+      "key": "fetch",
+      "params": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-fetch"
+        ],
+        "env": {}
+      },
+      "cache_tools_list": true
+    },
+    {
+      "name": "playwright",
+      "key": "playwright",
+      "params": {
+        "command": "npx",
+        "args": [
+          "@playwright/mcp@latest"
+        ],
+        "env": {}
+      },
+      "cache_tools_list": true
+    }
+  ]
+}
