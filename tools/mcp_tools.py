@@ -1,9 +1,10 @@
 import json
 import os
+import platform
 import shutil
 import subprocess
-import platform
-MCP_SERVERS = [
+
+SCANNER_MCP_SERVERS = [
     {
         "name": "AlterX",
         "key": "AlterX",
@@ -227,7 +228,7 @@ def get_tool_search_variants(exe_name):
 def write_mcp_json_from_servers(json_path=os.path.join(os.getcwd(), "mcp.json")): 
     """Write MCP_SERVERS info to mcp.json in the correct format."""
     servers = []
-    for srv in MCP_SERVERS:
+    for srv in SCANNER_MCP_SERVERS:
         params = {
             "command": srv["command"],
             "args": srv["args"].copy(),

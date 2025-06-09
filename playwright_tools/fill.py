@@ -2,24 +2,19 @@ from __future__ import annotations
 
 from typing import Optional, Type
 
-from langchain_core.callbacks import (
-    AsyncCallbackManagerForToolRun,
-    CallbackManagerForToolRun,
-)
-from langchain_core.pydantic_v1 import BaseModel, Field
-
 from langchain_community.tools.playwright.base import BaseBrowserTool
-from langchain_community.tools.playwright.utils import (
-    aget_current_page,
-    get_current_page,
-)
+from langchain_community.tools.playwright.utils import (aget_current_page,
+                                                        get_current_page)
+from langchain_core.callbacks import (AsyncCallbackManagerForToolRun,
+                                      CallbackManagerForToolRun)
+from pydantic import BaseModel, Field
 
 
 class FillToolInput(BaseModel):
     """Input for FillTool."""
 
     selector: str = Field(..., description="CSS selector for the element to fill")
-    value: str = Field(None, description="text to be filled in element")
+    value: str = Field("", description="Value to fill for the `<input>`, `<textarea>` or `[contenteditable]` element. Note that you can pass an empty string to clear the input field.")
 
 
 class FillTool(BaseBrowserTool):
@@ -27,11 +22,11 @@ class FillTool(BaseBrowserTool):
 
     name: str = "Fill_element"
     description: str = "Fill on an element with the given CSS selector"
-    args_schema: Type[BaseModel] = FillToolInput
-    visible_only: bool = True
+    args_schema: Type[BaseModel] = FillToolInput # type: ignore
+    visible_only: bool = False
     """Whether to consider only visible elements."""
     playwright_strict: bool = False
-    """Whether to employ Playwright's strict mode when Filling on elements."""
+    """Whether to employ Playwright's strict mode when Filling on elements. When true, the call requires selector to resolve to a single element. If given selector resolves to more than one element, the call throws an exception."""
     playwright_timeout: float = 1_000
     """Timeout (in ms) for Playwright to wait for element to be ready."""
 
@@ -93,6 +88,5 @@ class FillTool(BaseBrowserTool):
                 timeout=self.playwright_timeout,
             )
         except PlaywrightTimeoutError:
-            return f"Unable to Fill on element '{selector}'"
+            return f"Unable to Fill on element '{selector}'.\nselector_effective: {selector_effective}\nvalue_effective: {value_effective}"
         return f"Filled element '{selector}'"
-        
