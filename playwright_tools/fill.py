@@ -3,10 +3,14 @@ from __future__ import annotations
 from typing import Optional, Type
 
 from langchain_community.tools.playwright.base import BaseBrowserTool
-from langchain_community.tools.playwright.utils import (aget_current_page,
-                                                        get_current_page)
-from langchain_core.callbacks import (AsyncCallbackManagerForToolRun,
-                                      CallbackManagerForToolRun)
+from langchain_community.tools.playwright.utils import (
+    aget_current_page,
+    get_current_page,
+)
+from langchain_core.callbacks import (
+    AsyncCallbackManagerForToolRun,
+    CallbackManagerForToolRun,
+)
 from pydantic import BaseModel, Field
 
 
@@ -14,15 +18,18 @@ class FillToolInput(BaseModel):
     """Input for FillTool."""
 
     selector: str = Field(..., description="CSS selector for the element to fill")
-    value: str = Field("", description="Value to fill for the `<input>`, `<textarea>` or `[contenteditable]` element. Note that you can pass an empty string to clear the input field.")
+    value: str = Field(
+        "",
+        description="Value to fill for the `<input>`, `<textarea>` or `[contenteditable]` element. Note that you can pass an empty string to clear the input field.",
+    )
 
 
 class FillTool(BaseBrowserTool):
     """Tool for Filling on an element with the given CSS selector."""
 
-    name: str = "Fill_element"
+    name: str = "fill_element"
     description: str = "Fill on an element with the given CSS selector"
-    args_schema: Type[BaseModel] = FillToolInput # type: ignore
+    args_schema: Type[BaseModel] = FillToolInput  # type: ignore
     visible_only: bool = False
     """Whether to consider only visible elements."""
     playwright_strict: bool = False
@@ -34,6 +41,7 @@ class FillTool(BaseBrowserTool):
         if not self.visible_only:
             return selector
         return f"{selector} >> visible=1"
+
     def _value_effective(self, value: str) -> str:
         if not self.visible_only:
             return value
@@ -68,7 +76,7 @@ class FillTool(BaseBrowserTool):
     async def _arun(
         self,
         selector: str,
-        value:str,
+        value: str,
         run_manager: Optional[AsyncCallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool."""

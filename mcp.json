@@ -5,9 +5,12 @@
       "key": "AlterX",
       "params": {
         "command": "npx",
-        "args": ["-y", "gc-alterx-mcp"],
+        "args": [
+          "-y",
+          "gc-alterx-mcp"
+        ],
         "env": {
-          "ALTERX_PATH": "/Users/javiertan/go/bin/alterx"
+          "ALTERX_PATH": "C:\\Users\\user1\\go\\bin\\alterx.exe"
         }
       },
       "cache_tools_list": true
@@ -17,9 +20,12 @@
       "key": "Amass",
       "params": {
         "command": "npx",
-        "args": ["-y", "gc-amass-mcp"],
+        "args": [
+          "-y",
+          "gc-amass-mcp"
+        ],
         "env": {
-          "AMASS_PATH": "/opt/homebrew/bin/amass"
+          "AMASS_PATH": "C:\\Users\\user1\\go\\bin\\amass.exe"
         }
       },
       "cache_tools_list": true
@@ -29,21 +35,12 @@
       "key": "Arjun",
       "params": {
         "command": "npx",
-        "args": ["-y", "gc-arjun-mcp"],
+        "args": [
+          "-y",
+          "gc-arjun-mcp"
+        ],
         "env": {
-          "ARJUN_PATH": "/Users/javiertan/.local/bin/arjun"
-        }
-      },
-      "cache_tools_list": true
-    },
-    {
-      "name": "Assetfinder",
-      "key": "Assetfinder",
-      "params": {
-        "command": "npx",
-        "args": ["-y", "gc-assetfinder-mcp"],
-        "env": {
-          "ASSETFINDER_PATH": "/Users/javiertan/go/bin/assetfinder"
+          "ARJUN_PATH": "C:\\Users\\user1\\AppData\\Local\\Programs\\Python\\Python313\\Scripts\\arjun.exe"
         }
       },
       "cache_tools_list": true
@@ -53,7 +50,10 @@
       "key": "CrtSh",
       "params": {
         "command": "npx",
-        "args": ["-y", "gc-crtsh-mcp"],
+        "args": [
+          "-y",
+          "gc-crtsh-mcp"
+        ],
         "env": {}
       },
       "cache_tools_list": true
@@ -63,9 +63,12 @@
       "key": "FFUF",
       "params": {
         "command": "npx",
-        "args": ["-y", "gc-ffuf-mcp"],
+        "args": [
+          "-y",
+          "gc-ffuf-mcp"
+        ],
         "env": {
-          "FFUF_PATH": "/opt/homebrew/bin/ffuf"
+          "FFUF_PATH": "C:\\Users\\user1\\go\\bin\\ffuf.exe"
         }
       },
       "cache_tools_list": true
@@ -75,33 +78,12 @@
       "key": "HTTPx",
       "params": {
         "command": "npx",
-        "args": ["-y", "gc-httpx-mcp"],
+        "args": [
+          "-y",
+          "gc-httpx-mcp"
+        ],
         "env": {
-          "HTTPX_PATH": "/Users/javiertan/internship/agentic-sqli/.venv/bin/httpx"
-        }
-      },
-      "cache_tools_list": true
-    },
-    {
-      "name": "Hydra",
-      "key": "Hydra",
-      "params": {
-        "command": "npx",
-        "args": ["-y", "gc-hydra-mcp"],
-        "env": {
-          "HYDRA_PATH": "/opt/homebrew/bin/hydra"
-        }
-      },
-      "cache_tools_list": true
-    },
-    {
-      "name": "Nmap Scanner",
-      "key": "Nmap",
-      "params": {
-        "command": "npx",
-        "args": ["-y", "gc-nmap-mcp"],
-        "env": {
-          "NMAP_PATH": "/opt/homebrew/bin/nmap"
+          "HTTPX_PATH": "C:\\Users\\user1\\Documents\\internship\\project\\.venv\\Scripts\\httpx.exe"
         }
       },
       "cache_tools_list": true
@@ -111,7 +93,9 @@
       "key": "fetch",
       "params": {
         "command": "uvx",
-        "args": ["mcp-server-fetch"],
+        "args": [
+          "mcp-server-fetch"
+        ],
         "env": {}
       },
       "cache_tools_list": true

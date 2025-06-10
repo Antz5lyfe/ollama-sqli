@@ -12,7 +12,8 @@ load_dotenv()
 
 model = ChatOpenAI(model="gpt-4o")
 
-def load_mcp_servers_from_json(json_path="mcp.json"):
+
+def load_mcp_servers_from_json(json_path):
     with open(json_path, "r") as f:
         data = json.load(f)
     servers = {}
@@ -23,22 +24,12 @@ def load_mcp_servers_from_json(json_path="mcp.json"):
         servers[name] = params
     return servers
 
-async def get_mcp_tools():
-  client = MultiServerMCPClient(load_mcp_servers_from_json())
-  # try:
-  tools = await client.get_tools()
-  # except Exception as e:
-  #   print(f"Error loading tools from MCP server: {e}")
-  #   return
-  print("Loaded tools from MCP server")
-  for tool in tools:
-    print(f"Tool: {tool.name}, Description: {tool.description}")
-  
-  return tools
-  # agent = create_react_agent(model, tools)
-  # agent_response = await agent.ainvoke({"messages": "what's (4 + 6) x 14?"})
-  # print(agent_response["messages"][-1].content)
-  # return agent_response["messages"][-1].content
 
-# if __name__ == "__main__":
-#   asyncio.run(ge())
+async def get_mcp_tools(json_path="mcp.json"):
+    client = MultiServerMCPClient(load_mcp_servers_from_json(json_path))
+    tools = await client.get_tools()
+    print("Loaded tools from MCP server")
+    for tool in tools:
+        print(f"Tool: {tool.name}, Description: {tool.description}")
+
+    return tools
