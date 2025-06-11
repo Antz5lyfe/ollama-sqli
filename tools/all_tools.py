@@ -22,6 +22,7 @@ class PentestState(AgentState):
     tries: int
     successful: bool
     feedback: str
+    url: str
 
 
 search = GoogleSerperAPIWrapper()
