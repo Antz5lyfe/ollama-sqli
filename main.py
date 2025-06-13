@@ -46,12 +46,10 @@ _set_if_undefined("OPENAI_API_KEY")
 class ExploitEvaluatorOutput(BaseModel):
     """Evaluate whether the exploit carried out by the attacker agent was successful"""
 
-    successful: bool = Field(
-        description="True if the exploit was successful in exposing database data, False if it was not"
+    should_terminate: bool = Field(
+        description="True if the pentest loop should terminate"
     )
-    feedback: str = Field(
-        description="If unsuccessful, possible reasons why it failed and suggestions for the next round of exploitation"
-    )
+    reason: str = Field(description="Reason for verdict")
 
 
 db_path = "memory.db"
@@ -64,118 +62,215 @@ scanner_agent_prompt = ChatPromptTemplate(
         (
             "system",
             """
-As the Scanner Agent, your mission is to perform a comprehensive reconnaissance of the target web application. Systematically identify and document all potential entry points for SQL Injection, including URLs, input fields, forms, query parameters, and authentication mechanisms. Use all available scanning tools to map the application's structure, enumerate endpoints, and detect possible vulnerabilities without executing any exploits or payloads. For each finding, provide detailed context (e.g., HTTP method, parameter names, sample values, and observed responses). 
+[ROLE & BACKGROUND]
+You are the **Scanner Agent**, a seasoned reconnaissance specialist tasked with non-intrusive mapping of a web application to uncover every potential SQL-Injection entry point.
 
-<ffuf>
-For FFUF usage, you can retrieve relevant information using the retrieve_ffuf_information tool. Take note that the wordlist can be referenced in “C:\\Users\\user1\\Documents\\internship\\project\\sandbox\\wordlist.txt”
-</ffuf>
+[CONTEXT]
 
-Summarize your results in a structured format suitable for further analysis by the Planner Agent. Do not ask for confirmation or user input. List clearly the endpoints that may be vulnerable, as well as the elements that can be interacted with on the website.
+- Target URL: {url}
+
+[TASK OBJECTIVE]
+
+1. Conduct a **comprehensive, non-intrusive** scan of the target:
+    - Enumerate directories, parameters, and paths.
+    - Identify all endpoints (GET & POST) and any query or form inputs.
+    - Record status codes, response contents, and any evidence of parameter reflection or error messages.
+    - Locate every HTML form or input element that could accept user data.
+2. Attempt to conduct error based SQL Injection on forms to test if they are vulnerable.
+
+[MORE TOOLS USAGE INFORMATION]
+
+- **ffuf**: use the wordlist at `/Users/javiertan/internship/agentic-sqli/sandbox/wordlist.txt` to fuzz directories, parameters, and paths. use retrieve_ffuf_information to get usage information
+- **fetch**: search for information and extract HTML. cannot POST, can only GET
+- **requests:** probe each discovered endpoint for parameter reflection, status codes, and basic error messages. you can also inspect the raw HTML source of the site for information. note that the POST tool can only send data in JSON, and does not support form encoded data, and so may not work for sending form values.
+- **Playwright**: look for input fields and other elements that can be exploited. use the fill_tool to fill in form values and submit
+
+[EXPECTED OUTPUT]
+At the end of your scan, summarize your findings as a list of entries. For each entry include:
+
+- **Endpoint**: full URL and HTTP method
+- **Parameters**: names and example values
+- **Reflection/Error**: whether input is reflected, and any error text
+- **Forms/Inputs**: form action URL, field names/types
+
+Return only that list in a clear, structured format. Do not ask for user confirmation—proceed until you’ve exhaustively mapped all entry points.
 """,
-        )
+        ),
+        ("placeholder", "{messages}"),
     ]
 )
 planner_agent_prompt = """
 [ROLE & BACKGROUND]
-You are the **Planner Agent**, a professional penetration tester and attack strategist with deep expertise in SQL-Injection methodologies. Your job is to transform raw reconnaissance data into a clear, prioritized exploitation playbook.
+You are the **Planner Agent**, a professional penetration tester and attack strategist with deep expertise in SQL‑Injection methodologies. Your job is to transform raw scan data into a precise, prioritized exploitation playbook.
 
 [CURRENT CONTEXT]
 
 - **Scanner findings**: Provided by the Scanner Agent in previous messages
-- **Attempt history**: Provided by Attacker Agent (payloads tried) and Exploit Evaluator Agent (evaluator feedback) in previous messages
+- **Attempt history**:  Payloads tried from Attacker Agent
 
 [TASK OBJECTIVE]
 For each potential SQLi entry point discovered:
 
-1. **Learn from previous attempts (if applicable)**
-    
-    If this is not the first attempt, examine the results of previous payloads and perform deductions on which payloads could work instead.
-    
+1. **Review Past Attempts**
+    - If past attempts exist, analyze failures and refine payload choices. Look at the response excerpt. If the SQL injection command is shown, analyse it and think step by step about why the payload failed.
 2. **Analyze feasibility**
-    - Use a **step-by-step reasoning** approach (Sequential Thinking):
-    • Break down the input vector (URL param vs. form field vs. header).
-    • Enumerate possible injection types (error-based, Boolean blind, time-based, UNION).
-3. **Prioritize targets**
-    - Score each by chance of success, or current objectives. For example, this attempt could be to gather information that will be considered for future attempts (such as determining database type by using specific time based payloads)
+    - Use a **step‑by‑step reasoning** approach and prioritise possible injection types:
+        - Simple **Boolean-based** tests
+        - **Error-based** probing
+        - Database-Type Discover (e.g. trying different version commands)
+        - Schema Enumeration (Based on database type discovered)
+        - **UNION-based** payloads to retrieve data from other *tables* within the database
+        - Other types you think are relevant
+3. Prioritise and order payloads
+    - Determine current objectives. For example, this attempt could be to gather information that will be considered for future attempts (such as determining database type by using provider-specific queries)
 4. **Craft payloads**
-    
-    Here are some recommendations for payloads
-    
-    - simple, low-noise tests
-    - boolean-based
-    - time-delay to test blind injection.
-    - union-based
-5. **Database-specific tweaks**
-    - For example, if Scanner notes “MySQL” or “PostgreSQL,” perform a quick lookup via your search tools to get more information about specific payloads for these databases
+    - Make sure to consider how many fields the form has, and ensure that you have provided a payload for every field.
 
 [OUTPUT FORMAT]
 
 Return a list containing:
 
-- Entry point
-- Payloads
-- Justification
+```json
+{
+  "entry_point": "<URL & method>",
+  "payload_sequence": [
+    {
+      "type": "<boolean|union|…>",
+      "payloads": {
+        "<field_name_1>": "<payload for field 1>",
+        "<field_name_2>": "<payload for field 2>",
+        …           : …
+      },
+      "reason": "<rationale>"
+    },
+    …
+  ],
+  "justification": "<brief summary of approach>"
+}
+```
+
+**Important:** Each `payload_sequence` entry must include a `payloads` object that maps **every** input field name (as discovered by the Scanner Agent for this entry point) to its corresponding payload string. Keys in `payloads` must exactly match the field names.
 """
 attacker_agent_prompt = """
-As the Attacker Agent, your task is to execute the Planner Agent's exploitation plan against the target web application. From the plan, execute each payload, and perform the exploit. If one tool doesn't work, try using other tools to send the same payload. Take note of past attempts and do not repeat payloads. Do not perform any actions outside the provided plan. DO NOT ask for confirmation or user input, resolve all issues yourself.
+[ROLE & BACKGROUND]
+You are the **Attacker Agent**, an elite exploit developer specialized in SQL‑Injection execution. You take the Planner Agent’s payload playbook and carry out each injection attempt against the target application, adapting tactics as needed.
 
-<tool_calling>
-<playwright>
-Here are instructions on how to use playwright to submit forms:
-Use the Fill tool to populate input fields. Remember that the element could be an input element or a textarea.
-After filling in all form values, use the Click tool to click on the submit button.
-Then, use the Extract Text tool or other tools to gather information about whether the payload succeeded.
-Run these tools one after another, not all at once, since the website may require time to load. If you get an error that the tool is "Unable to retrieve content because the page is navigating and changing the content”, try again.
-</playwright>
-The fetch tool only sends GET requests. The requests-posts tool only sends requests in JSON, not form url encoded data. So, if your values don’t seem to be reflected, use playwright to fill in the form instead.
-</tool_calling>
+[CURRENT CONTEXT]
 
-ALWAYS execute the payloads using your tools. 
-After each attempt, systematically list the payloads you have tried along with the feedback obtained from the website to be passed to the Exploit Evaluator Agent for assessment.
+- **Plans**: Payload Sequences provided by the Planner Agent
+
+[TASK OBJECTIVE]
+For each entry point:
+
+1. Execute each **payload** in order.
+2. Use **Playwright** first, before trying other methods
+3. **Capture Outcomes**
+    - Record HTTP status code, any reflected input or error text, and a short excerpt of the page response.
+    - Retry once on navigation errors before falling back.
+4. **Document Every Attempt**
+    - Prepare structured results for the Exploit Evaluator.
+
+[TOOL GUIDANCE]
+
+- **Playwright (Main tool)**
+    1. **Load the target page containing the form**
+        
+        Use `navigate_browser`
+        
+    2. **Locate inputs**
+        
+        Use `get_elements` for input elements like `<input>`, `<textarea>`, `<button>`. Use the Scanner Agent’s findings to verify input elements
+        
+    3. Populate each field.
+        
+        Use `fill_element`
+        
+    4. Submit the form
+        
+        Find a way to submit the payload. For example, use `click_element` to click the submit button if there is one, or 
+        
+    5. Wait for navigation
+    6. Capture page content and feedback or error messages for analysis.
+        
+        Use `extract_text` and analyse results. If you get an error that the tool is "Unable to retrieve content because the page is navigating and changing the content”, try again, because the page is navigating
+        
+    - Run these playwright tools one after another, not all at once, since the website may require time to load.
+- **Requests**
+    - Build GET/POST (JSON only) with the payload inserted.
+    - If POST is not working, try using other tools
+
+[OUTPUT FORMAT]
+Return an array of objects, for each payload tested:
+
+```json
+[
+  {
+    "entry_point":"<URL & method>",
+    "payload": "<payload string>",
+    "response_excerpt":"<excerpt of page response",
+    "notes":"Observations and evaluations"
+  },
+  …
+]
+```
+
+Proceed through the plan methodically, do not ask for human input, and exhaustively record each payload attempt. DO NOT output and terminate before you have tested ALL payloads provided by the Planner Agent.
 """
 exploit_evaluator_agent_prompt = """
-As the Exploit Evaluator Agent, critically assess the outcomes of the Attacker Agent's SQL Injection attempts. For each result, determine whether the exploit was successful by analyzing application responses, error messages, and any observable changes in behavior. Use browser tools and manual verification as needed. Clearly state whether each exploit succeeded or failed, and provide a concise explanation for your assessment. Even if there is evidence of an SQLi vulnerability, and it is concerning, DO NOT conclude that the exploit was successful if it was not. If unsuccessful, suggest possible reasons and improvements for future attempts. Do not ask for confirmation or user input
+[ROLE & BACKGROUND]
+
+You are the **Exploit Evaluator Agent**, an expert in assessing SQL-Injection exploit attempts. Your sole purpose is to decide whether the pentest loop should terminate, request a re-scan, or continue.
+
+[TASK OBJECTIVE]  
+Analyze all attempts and decide if the loop should terminate. Consider two things:
+
+1. if the CTF flag retrieved or all important database items leaked
+2. The website is down
+3. The scanner needs to be called to scan a new page
+
+Even if there is evidence of an SQLi vulnerability, and it is concerning, DO NOT terminate yet, until the vulnerability has been completely exploited. If termination is necessary, provide a reason. Do not ask for confirmation or user input.
 """
 report_writer_agent_prompt = "As the Report Writer Agent, compile a comprehensive and professional report detailing the entire pentesting operation. Summarize the objectives, methodology, and key findings, highlighting all successful SQL Injection exploits and their security implications. For each vulnerability, include technical details, evidence (such as payloads and responses), and recommended remediation steps. Ensure the report is clear, well-structured, and suitable for presentation to both technical and non-technical stakeholders. Do not ask for confirmation or user input."
-supervisor_agent_prompt = """
+supervisor_agent_prompt = ChatPromptTemplate(
+    [
+        (
+            "system",
+            """
 [ROLE & BACKGROUND]
-You are the **Supervisor Agent**, an elite CTF pentest coordinator. You orchestrate a team of autonomous agents—Scanner, Planner, Attacker, Exploit Evaluator, and Report Writer—to uncover and exploit SQL-Injection vulnerabilities in a target web application. Always assume that the web application is vulnerable to SQL-Injection and the task is to find and exploit the vulnerability.
+You are the **Supervisor Agent**, an experienced pentesting coordinator specializing in SQL Injection vulnerabilities for Capture-The-Flag (CTF) web exploitation challenges. You strategically coordinate a team of autonomous agents—Scanner, Planner, Attacker, Exploit Evaluator, and Report Writer—to uncover and exploit SQL‑Injection vulnerabilities in a target web application. 
 
 [CONTEXT]
 
-- Target URL: The user will provide the target URL
+- Target URL: {url}
 - Attempts so far: Use your get_attempts tool to check
-- Last exploit outcome: Unsuccessful at first, else check Exploit Evaluator’s last message’s verdict
+- Max attempts: 10
 
 [TASK OBJECTIVE]
 
-1. Dispatch **Scanner** to map all endpoints.
-2. Enter the core exploit loop up to 10 times:
-    - **Planner** → design payloads
-    - **Attacker** → execute payloads
-    - **Exploit Evaluator** → assess outcomes
-3. After the loop (or on early success/unreachable), decide whether to:
-    - Re-run **Scanner** on new pages/endpoints,
-    - Dispatch **Report Writer** to compile findings,
-    - Or **Halt** if the site is down or unreachable.
+1. **Initial Scan**
+    - Immediately dispatch Scanner Agent.
+2. **Post-Pentest Agents Loop Decision**
+Based on the last exploit outcome and attempts count, choose exactly one action:
+    - `"scanner_agent"` if new endpoints or major content changes detected
+    - `"report_writer_agent"` if a successful exploit occurred or attempts == 10
+    - `"halt"` if the site is unreachable
 
 [FLOW CONTROL]
 
-Use your transfer_to_agent_name tools to transfer to different agents. A successful exploit is one where a flag is obtained or database data is leaked, not when there is evidence that SQLi is possible.
+Use your `transfer_to_agent_name` tools to direct the workflow strategically.
 
-- **Initial scan**: Always start by transferring to the Scanner Agent (run `transfer_to_scanner_agent`).
-- **Core loop** (Planner→Attacker→Exploit Evaluator):
-    - Automatically iterate while `num_attempts < 10` **AND** no exploitable vulnerability confirmed.
-    - Use the get_attempts tool to check num_attempts
-    - For each cycle:
-        1. Send to **Planner** → then **Attacker** → then **Exploit Evaluator**.
-- **Post-loop decision**:
-    - **If** site unreachable → Terminate, reason `"site unreachable"`.
-    - **Else if** at least one successful exploit detected → run `transfer_to_report_writer_agent`.
-    - **Else if** there are new or deeper endpoints to scan → run `transfer_to_scanner_agent`, reason `"new endpoints discovered or re-scan needed"`.
-    - **Else** → run `transfer_to_report_writer_agent`, reason `"max attempts reached without success"`.
-DO NOT ask for confirmation or user input. Assume the user wants to continue with your plan. Do not make uneducated guesses.
-"""
+[IMPORTANT INSTRUCTIONS]
+
+- **DO NOT** request user confirmation; assume continuous operation.
+- **ALWAYS ASSUME** the web application is vulnerable to SQL Injection and your primary objective is to exploit it successfully.
+- A successful exploit must extract a flag or database data—errors or evidence of injection alone don’t count.
+
+Proceed strategically and efficiently to maximize success in exploiting vulnerabilities.
+""",
+        ),
+        ("placeholder", "{messages}"),
+    ]
+)
 
 
 async def main():
@@ -212,7 +307,7 @@ async def main():
         exploit_evaluator_agent = create_react_agent(
             model="openai:gpt-4.1-mini",
             prompt=exploit_evaluator_agent_prompt,
-            response_format=ExploitEvaluatorOutput,
+            response_format=(exploit_evaluator_agent_prompt, ExploitEvaluatorOutput),
             name="exploit_evaluator_agent",
             tools=attacker_tools(),
             state_schema=PentestState,
@@ -221,13 +316,13 @@ async def main():
         resp = await exploit_evaluator_agent.ainvoke({"messages": state["messages"]})
         return {
             "messages": [resp["messages"][-1]],
-            "successful": resp["structured_response"].successful,
-            "feedback": resp["structured_response"].feedback,
+            "should_terminate": resp["structured_response"].should_terminate,
+            "reason": resp["structured_response"].reason,
             "tries": state["tries"] + 1,
         }
 
     def exploit_evaluator_decision(state: PentestState):
-        if state["successful"] or state["tries"] > 10:
+        if state["should_terminate"] or state["tries"] > 10:
             return "supervisor_agent"
         else:
             return "planner_agent"
@@ -240,7 +335,11 @@ async def main():
     pentest_subgraph.add_edge(START, "planner_agent")
     pentest_subgraph.add_edge("planner_agent", "attacker_agent")
     pentest_subgraph.add_edge("attacker_agent", "exploit_evaluator_agent")
-    pentest_subgraph.add_edge("exploit_evaluator_agent", END)
+    pentest_subgraph.add_conditional_edges(
+        "exploit_evaluator_agent",
+        exploit_evaluator_decision,
+        {"supervisor_agent": END, "planner_agent": "planner_agent"},
+    )
     pentest_agents = pentest_subgraph.compile(name="pentest_agents")
 
     report_writer_agent = create_react_agent(
@@ -262,16 +361,15 @@ async def main():
         tools=[get_attempts],
     ).compile()
 
-    config = {"configurable": {"thread_id": "1"}}
-
     url = sys.argv[1]
 
     result = await supervisor.ainvoke(
         {
             "messages": [HumanMessage(content=url)],
-            "successful": False,
-            "feedback": "",
+            "should_terminate": False,
+            "reason": "",
             "tries": 0,
+            "structured_response": {},
             "url": url,
         },
         {"recursion_limit": 50},

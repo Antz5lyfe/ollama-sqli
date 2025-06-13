@@ -12,16 +12,16 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing import Annotated
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
-from langgraph.prebuilt.chat_agent_executor import AgentState
+from langgraph.prebuilt.chat_agent_executor import AgentStateWithStructuredResponse
 
 from mcp_client import get_mcp_tools
 from playwright_tools.custom_playwright_toolkit import PlayWrightBrowserToolkit
 
 
-class PentestState(AgentState):
+class PentestState(AgentStateWithStructuredResponse):
     tries: int
-    successful: bool
-    feedback: str
+    should_terminate: bool
+    reason: str
     url: str
 
 
@@ -67,6 +67,7 @@ sqli_rag_tool = rag(
         "https://www.cobalt.io/blog/a-pentesters-guide-to-sql-injection-sqli",
         "https://github.com/AdmiralGaust/SQL-Injection-cheat-sheet",
         "https://portswigger.net/web-security/sql-injection/cheat-sheet",
+        "https://portswigger.net/web-security/sql-injection/union-attacks",
         "https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/SQL%20Injection/README.md",
     ],
     "retrieve_sqli_information",

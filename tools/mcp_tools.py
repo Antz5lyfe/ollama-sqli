@@ -253,9 +253,8 @@ def get_tool_search_variants(exe_name):
     return variants
 
 
-def write_mcp_json_from_servers(
-    servers_list: list[dict], json_path=os.path.join(os.getcwd(), "mcp.json")
-):
+def write_mcp_json_from_servers(servers_list: list[dict], json_path="mcp.json"):
+    actual_path = os.path.join(os.getcwd(), json_path)
     servers = []
     for srv in servers_list:
         params = {"command": srv["command"], "args": srv["args"].copy(), "env": {}}
@@ -293,9 +292,9 @@ def write_mcp_json_from_servers(
                 "params": params,
             }
             servers.append(server_entry)
-    with open(json_path, "w", encoding="utf-8") as f:
+    with open(actual_path, "w", encoding="utf-8") as f:
         json.dump({"servers": servers}, f, indent=2)
-    print(f"Wrote {len(servers)} servers to {json_path}")
+    print(f"Wrote {len(servers)} servers to {actual_path}")
 
 
 write_mcp_json_from_servers(
