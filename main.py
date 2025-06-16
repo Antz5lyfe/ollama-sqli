@@ -1,4 +1,7 @@
 import sys
+from typing import TypedDict
+
+from langchain_openai import ChatOpenAI
 
 if len(sys.argv) < 2:
     print("Usage: python main.py <url>")
@@ -43,13 +46,21 @@ def _set_if_undefined(var: str):
 _set_if_undefined("OPENAI_API_KEY")
 
 
-class ExploitEvaluatorOutput(BaseModel):
+class ExploitEvaluatorOutput(TypedDict):
     """Evaluate whether the exploit carried out by the attacker agent was successful"""
 
     should_terminate: bool = Field(
         description="True if the pentest loop should terminate"
     )
     reason: str = Field(description="Reason for verdict")
+
+
+class AttackerOutput(TypedDict):
+    """Final output of the Agent"""
+
+    final_output: list[dict[str, str]] = Field(
+        description="The exact final json output of the Agent"
+    )
 
 
 db_path = "memory.db"
@@ -80,17 +91,17 @@ You are the **Scanner Agent**, a seasoned reconnaissance specialist tasked with 
 
 [MORE TOOLS USAGE INFORMATION]
 
-- **ffuf**: use the wordlist at `/Users/javiertan/internship/agentic-sqli/sandbox/wordlist.txt` to fuzz directories, parameters, and paths. use retrieve_ffuf_information to get usage information
+- **ffuf**: use the wordlist at C:\\Users\\user1\\Documents\\internship\\project\\sandbox\\wordlist.txt to fuzz directories, parameters, and paths. use retrieve_ffuf_information to get usage information
 - **fetch**: search for information and extract HTML. cannot POST, can only GET
 - **requests:** probe each discovered endpoint for parameter reflection, status codes, and basic error messages. you can also inspect the raw HTML source of the site for information. note that the POST tool can only send data in JSON, and does not support form encoded data, and so may not work for sending form values.
-- **Playwright**: look for input fields and other elements that can be exploited. use the fill_tool to fill in form values and submit
+- **Playwright**: look for input fields and other elements that can be exploited. use the fill_tool to fill in form values and submit. extract_html can be used to look through the HTML source code of the website
 
 [EXPECTED OUTPUT]
 At the end of your scan, summarize your findings as a list of entries. For each entry include:
 
 - **Endpoint**: full URL and HTTP method
 - **Parameters**: names and example values
-- **Reflection/Error**: whether input is reflected, and any error text
+- **Reflection/Error**: whether input is reflected, and any error text. if input is reflected, state the sql command
 - **Forms/Inputs**: form action URL, field names/types
 
 Return only that list in a clear, structured format. Do not ask for user confirmation—proceed until you’ve exhaustively mapped all entry points.
@@ -99,20 +110,24 @@ Return only that list in a clear, structured format. Do not ask for user confirm
         ("placeholder", "{messages}"),
     ]
 )
-planner_agent_prompt = """
+planner_agent_prompt = ChatPromptTemplate(
+    [
+        (
+            "system",
+            """
 [ROLE & BACKGROUND]
 You are the **Planner Agent**, a professional penetration tester and attack strategist with deep expertise in SQL‑Injection methodologies. Your job is to transform raw scan data into a precise, prioritized exploitation playbook.
 
 [CURRENT CONTEXT]
 
 - **Scanner findings**: Provided by the Scanner Agent in previous messages
-- **Attempt history**:  Payloads tried from Attacker Agent
+- **Attempt history**:  {attempts}
 
 [TASK OBJECTIVE]
 For each potential SQLi entry point discovered:
 
 1. **Review Past Attempts**
-    - If past attempts exist, analyze failures and refine payload choices. Look at the response excerpt. If the SQL injection command is shown, analyse it and think step by step about why the payload failed.
+    - If past attempts exist, analyze failures and refine payload choices. Look at the response excerpt. If the SQL injection is reflected, analyse the command and think step by step about why the payload failed. DO NOT repeat past payloads.
 2. **Analyze feasibility**
     - Use a **step‑by‑step reasoning** approach and prioritise possible injection types:
         - Simple **Boolean-based** tests
@@ -127,31 +142,39 @@ For each potential SQLi entry point discovered:
     - Make sure to consider how many fields the form has, and ensure that you have provided a payload for every field.
 
 [OUTPUT FORMAT]
-
-Return a list containing:
+Explain what the challenge is, and why previous attempts failed.
+Then, return a list containing:
 
 ```json
-{
+{{
   "entry_point": "<URL & method>",
   "payload_sequence": [
-    {
+    {{
       "type": "<boolean|union|…>",
-      "payloads": {
+      "payloads": {{
         "<field_name_1>": "<payload for field 1>",
         "<field_name_2>": "<payload for field 2>",
         …           : …
-      },
+      }},
       "reason": "<rationale>"
-    },
+    }},
     …
   ],
   "justification": "<brief summary of approach>"
-}
+}}
 ```
 
 **Important:** Each `payload_sequence` entry must include a `payloads` object that maps **every** input field name (as discovered by the Scanner Agent for this entry point) to its corresponding payload string. Keys in `payloads` must exactly match the field names.
-"""
-attacker_agent_prompt = """
+""",
+        ),
+        ("placeholder", "{messages}"),
+    ]
+)
+attacker_agent_prompt = ChatPromptTemplate(
+    [
+        (
+            "system",
+            """
 [ROLE & BACKGROUND]
 You are the **Attacker Agent**, an elite exploit developer specialized in SQL‑Injection execution. You take the Planner Agent’s payload playbook and carry out each injection attempt against the target application, adapting tactics as needed.
 
@@ -192,7 +215,7 @@ For each entry point:
     5. Wait for navigation
     6. Capture page content and feedback or error messages for analysis.
         
-        Use `extract_text` and analyse results. If you get an error that the tool is "Unable to retrieve content because the page is navigating and changing the content”, try again, because the page is navigating
+        Use `extract_html` and analyse results. If you get an error that the tool is "Unable to retrieve content because the page is navigating and changing the content”, try again, because the page is navigating
         
     - Run these playwright tools one after another, not all at once, since the website may require time to load.
 - **Requests**
@@ -204,19 +227,27 @@ Return an array of objects, for each payload tested:
 
 ```json
 [
-  {
+  {{
     "entry_point":"<URL & method>",
     "payload": "<payload string>",
-    "response_excerpt":"<excerpt of page response",
-    "notes":"Observations and evaluations"
-  },
+    "response_excerpt":"<excerpt of page response. only include relevant parts>",
+    "notes":"<excerpt of page response. only include relevant parts. if sql injection is reflected, display that.>"
+  }},
   …
 ]
 ```
 
 Proceed through the plan methodically, do not ask for human input, and exhaustively record each payload attempt. DO NOT output and terminate before you have tested ALL payloads provided by the Planner Agent.
-"""
-exploit_evaluator_agent_prompt = """
+""",
+        ),
+        ("placeholder", "{messages}"),
+    ]
+)
+exploit_evaluator_agent_prompt = ChatPromptTemplate(
+    [
+        (
+            "system",
+            """
 [ROLE & BACKGROUND]
 
 You are the **Exploit Evaluator Agent**, an expert in assessing SQL-Injection exploit attempts. Your sole purpose is to decide whether the pentest loop should terminate, request a re-scan, or continue.
@@ -229,7 +260,12 @@ Analyze all attempts and decide if the loop should terminate. Consider two thing
 3. The scanner needs to be called to scan a new page
 
 Even if there is evidence of an SQLi vulnerability, and it is concerning, DO NOT terminate yet, until the vulnerability has been completely exploited. If termination is necessary, provide a reason. Do not ask for confirmation or user input.
-"""
+""",
+        ),
+        ("placeholder", "{messages}"),
+    ]
+)
+
 report_writer_agent_prompt = "As the Report Writer Agent, compile a comprehensive and professional report detailing the entire pentesting operation. Summarize the objectives, methodology, and key findings, highlighting all successful SQL Injection exploits and their security implications. For each vulnerability, include technical details, evidence (such as payloads and responses), and recommended remediation steps. Ensure the report is clear, well-structured, and suitable for presentation to both technical and non-technical stakeholders. Do not ask for confirmation or user input."
 supervisor_agent_prompt = ChatPromptTemplate(
     [
@@ -252,8 +288,7 @@ You are the **Supervisor Agent**, an experienced pentesting coordinator speciali
 2. **Post-Pentest Agents Loop Decision**
 Based on the last exploit outcome and attempts count, choose exactly one action:
     - `"scanner_agent"` if new endpoints or major content changes detected
-    - `"report_writer_agent"` if a successful exploit occurred or attempts == 10
-    - `"halt"` if the site is unreachable
+    - `"report_writer_agent"` if a successful exploit occurred or attempts == 10 or site is unreachable
 
 [FLOW CONTROL]
 
@@ -275,7 +310,7 @@ Proceed strategically and efficiently to maximize success in exploiting vulnerab
 
 async def main():
     scanner_agent = create_react_agent(
-        model="openai:gpt-4.1-mini",
+        model="openai:gpt-4.1",
         prompt=scanner_agent_prompt,
         name="scanner_agent",
         tools=await scanner_tools(),
@@ -286,7 +321,7 @@ async def main():
     # --- Subgraph for planner -> attacker -> exploit evaluator ---
 
     planner_agent = create_react_agent(
-        model="openai:gpt-4.1-mini",
+        model="openai:gpt-4.1",
         prompt=planner_agent_prompt,
         name="planner_agent",
         tools=await planner_tools(),
@@ -294,18 +329,33 @@ async def main():
         debug=True,
     )
 
-    attacker_agent = create_react_agent(
-        model="openai:gpt-4.1-mini",
-        prompt=attacker_agent_prompt,
-        name="attacker_agent",
-        tools=attacker_tools(),
-        state_schema=PentestState,
-        debug=True,
-    )
+    async def attacker(state: PentestState):
+        attacker_agent = create_react_agent(
+            model="openai:gpt-4.1",
+            prompt=attacker_agent_prompt,
+            name="attacker_agent",
+            tools=attacker_tools(),
+            state_schema=PentestState,
+            response_format=("Copy the exact final output", AttackerOutput),
+            debug=True,
+        )
+        resp = await attacker_agent.ainvoke(state)
+        if "final_output" not in resp["structured_response"] or not isinstance(
+            resp["structured_response"]["final_output"], list
+        ):
+            raise ValueError("Attacker agent did not return any attempts")
+        # obj = resp["structured_response"]["final_output"]
+        # new_dict = [
+        #     {k: obj[v][k] for k in obj[v].keys() - {"response_excerpt"}} for v in obj
+        # ]
+        return {
+            "messages": [resp["messages"][-1]],
+            "attempts": resp["structured_response"]["final_output"],
+        }
 
     async def exploit_evaluator(state: PentestState):
         exploit_evaluator_agent = create_react_agent(
-            model="openai:gpt-4.1-mini",
+            model="openai:gpt-4.1",
             prompt=exploit_evaluator_agent_prompt,
             response_format=(exploit_evaluator_agent_prompt, ExploitEvaluatorOutput),
             name="exploit_evaluator_agent",
@@ -313,11 +363,19 @@ async def main():
             state_schema=PentestState,
             debug=True,
         )
-        resp = await exploit_evaluator_agent.ainvoke({"messages": state["messages"]})
+        resp = await exploit_evaluator_agent.ainvoke(state)
+        if "reason" not in resp["structured_response"]:
+            raise ValueError(
+                "Exploit Evaluator agent did not provide a reason for termination"
+            )
+        if "should_terminate" not in resp["structured_response"]:
+            raise ValueError(
+                "Exploit Evaluator agent did not indicate whether to terminate or not"
+            )
         return {
             "messages": [resp["messages"][-1]],
-            "should_terminate": resp["structured_response"].should_terminate,
-            "reason": resp["structured_response"].reason,
+            "should_terminate": resp["structured_response"]["should_terminate"],
+            "reason": resp["structured_response"]["reason"],
             "tries": state["tries"] + 1,
         }
 
@@ -329,7 +387,7 @@ async def main():
 
     pentest_subgraph = StateGraph(PentestState)
     pentest_subgraph.add_node("planner_agent", planner_agent)
-    pentest_subgraph.add_node("attacker_agent", attacker_agent)
+    pentest_subgraph.add_node("attacker_agent", attacker)
     pentest_subgraph.add_node("exploit_evaluator_agent", exploit_evaluator)
 
     pentest_subgraph.add_edge(START, "planner_agent")
@@ -343,7 +401,7 @@ async def main():
     pentest_agents = pentest_subgraph.compile(name="pentest_agents")
 
     report_writer_agent = create_react_agent(
-        model="openai:gpt-4.1-mini",
+        model="openai:gpt-4.1",
         prompt=report_writer_agent_prompt,
         name="report_writer_agent",
         tools=[search_tool],
@@ -352,7 +410,7 @@ async def main():
     )
 
     supervisor = create_supervisor(
-        model=init_chat_model("openai:gpt-4.1-mini"),
+        model=init_chat_model("openai:gpt-4.1"),
         agents=[scanner_agent, pentest_agents, report_writer_agent],
         prompt=supervisor_agent_prompt,
         add_handoff_back_messages=True,
@@ -366,15 +424,15 @@ async def main():
     result = await supervisor.ainvoke(
         {
             "messages": [HumanMessage(content=url)],
+            "tries": 0,
             "should_terminate": False,
             "reason": "",
-            "tries": 0,
-            "structured_response": {},
             "url": url,
+            "attempts": [],
+            "structured_response": {},
         },
-        {"recursion_limit": 50},
+        {"recursion_limit": 100},
     )
-    print(result)
 
 
 if __name__ == "__main__":

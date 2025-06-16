@@ -191,17 +191,17 @@ ALL_MCP_SERVERS = [
 ]
 
 scanner_keys = [
-    "AlterX",
-    "Amass",
-    "Arjun",
-    "Assetfinder",
-    "CrtSh",
-    "FFUF",
+    # "AlterX",
+    # "Amass",
+    # "Arjun",
+    # "Assetfinder",
+    # "CrtSh",
+    # "FFUF",
     "HTTPx",
-    "Hydra",
-    "Katana",
-    "Masscan",
-    "Nmap",
+    # "Hydra",
+    # "Katana",
+    # "Masscan",
+    # "Nmap",
     "fetch",
     "sequential-thinking",
 ]

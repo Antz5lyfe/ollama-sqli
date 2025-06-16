@@ -1,16 +1,18 @@
 """Playwright web browser toolkit."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, List, Optional, Type, cast
 
 from langchain_community.agent_toolkits.base import BaseToolkit
 from langchain_community.tools.playwright.base import (
-    BaseBrowserTool, lazy_import_playwright_browsers)
-from langchain_community.tools.playwright.current_page import \
-    CurrentWebPageTool
-from langchain_community.tools.playwright.extract_hyperlinks import \
-    ExtractHyperlinksTool
-from langchain_community.tools.playwright.extract_text import ExtractTextTool
+    BaseBrowserTool,
+    lazy_import_playwright_browsers,
+)
+from langchain_community.tools.playwright.current_page import CurrentWebPageTool
+from langchain_community.tools.playwright.extract_hyperlinks import (
+    ExtractHyperlinksTool,
+)
 from langchain_community.tools.playwright.get_elements import GetElementsTool
 from langchain_community.tools.playwright.navigate import NavigateTool
 from langchain_community.tools.playwright.navigate_back import NavigateBackTool
@@ -19,6 +21,9 @@ from pydantic.v1 import Extra, root_validator
 
 from playwright_tools.click import ClickTool
 from playwright_tools.fill import FillTool
+from playwright_tools.extract_text import ExtractTextTool
+from playwright_tools.extract_html import ExtractHTMLTool
+
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser as AsyncBrowser
@@ -84,6 +89,7 @@ class PlayWrightBrowserToolkit(BaseToolkit):
             NavigateTool,
             NavigateBackTool,
             ExtractTextTool,
+            ExtractHTMLTool,
             ExtractHyperlinksTool,
             GetElementsTool,
             CurrentWebPageTool,

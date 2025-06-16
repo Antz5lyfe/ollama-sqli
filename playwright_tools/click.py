@@ -3,10 +3,14 @@ from __future__ import annotations
 from typing import Optional, Type
 
 from langchain_community.tools.playwright.base import BaseBrowserTool
-from langchain_community.tools.playwright.utils import (aget_current_page,
-                                                        get_current_page)
-from langchain_core.callbacks import (AsyncCallbackManagerForToolRun,
-                                      CallbackManagerForToolRun)
+from langchain_community.tools.playwright.utils import (
+    aget_current_page,
+    get_current_page,
+)
+from langchain_core.callbacks import (
+    AsyncCallbackManagerForToolRun,
+    CallbackManagerForToolRun,
+)
 from pydantic import BaseModel, Field
 
 
@@ -21,13 +25,13 @@ class ClickTool(BaseBrowserTool):
 
     name: str = "click_element"
     description: str = "Click on an element with the given CSS selector"
-    args_schema: Type[BaseModel] = ClickToolInput # type: ignore
+    args_schema: Type[BaseModel] = ClickToolInput  # type: ignore
 
     visible_only: bool = False
     """Whether to consider only visible elements."""
     playwright_strict: bool = False
     """Whether to employ Playwright's strict mode when clicking on elements."""
-    playwright_timeout: float = 1_000
+    playwright_timeout: float = 5_000
     """Timeout (in ms) for Playwright to wait for element to be ready."""
 
     def _selector_effective(self, selector: str) -> str:
@@ -49,11 +53,12 @@ class ClickTool(BaseBrowserTool):
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
         try:
-            page.click(
-                selector_effective,
-                strict=self.playwright_strict,
-                timeout=self.playwright_timeout,
-            )
+            with page.expect_navigation(timeout=self.playwright_timeout):
+                page.click(
+                    selector_effective,
+                    strict=self.playwright_strict,
+                    timeout=self.playwright_timeout,
+                )
         except PlaywrightTimeoutError:
             return f"Unable to click on element '{selector}'"
         return f"Clicked element '{selector}'"
@@ -72,11 +77,12 @@ class ClickTool(BaseBrowserTool):
         from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
         try:
-            await page.click(
-                selector_effective,
-                strict=self.playwright_strict,
-                timeout=self.playwright_timeout,
-            )
+            async with page.expect_navigation(timeout=self.playwright_timeout):
+                await page.click(
+                    selector_effective,
+                    strict=self.playwright_strict,
+                    timeout=self.playwright_timeout,
+                )
         except PlaywrightTimeoutError:
             return f"Unable to click on element '{selector}'"
         return f"Clicked element '{selector}'"

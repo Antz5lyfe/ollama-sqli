@@ -16,6 +16,7 @@ from langgraph.prebuilt.chat_agent_executor import AgentStateWithStructuredRespo
 
 from mcp_client import get_mcp_tools
 from playwright_tools.custom_playwright_toolkit import PlayWrightBrowserToolkit
+from operator import add
 
 
 class PentestState(AgentStateWithStructuredResponse):
@@ -23,6 +24,7 @@ class PentestState(AgentStateWithStructuredResponse):
     should_terminate: bool
     reason: str
     url: str
+    attempts: Annotated[list[dict[str, str]], add]
 
 
 search = GoogleSerperAPIWrapper()
@@ -116,7 +118,7 @@ def get_attempts(state: Annotated[PentestState, InjectedState]) -> int:
 async def scanner_tools():
     return (
         (await get_mcp_tools("scanner_mcp.json"))
-        + [search_tool, ffuf_rag_tool]
+        + [search_tool]
         + playwright_tools()
         + file_management_tools
     )
