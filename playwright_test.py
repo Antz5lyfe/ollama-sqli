@@ -46,7 +46,7 @@ async def main():
     #     print(f"Tool: {tool.name}, Description: {tool.description}")
     async_browser = create_async_playwright_browser(headless=False)
     page = await async_browser.new_page()
-    await page.goto("http://saturn.picoctf.net:49691")
+    await page.goto("http://saturn.picoctf.net:63702/")
     # await page.click("input[name='username']")
     # from playwright.async_api import TimeoutError as PlaywrightTimeoutError
     # try:
@@ -59,11 +59,21 @@ async def main():
     # except PlaywrightTimeoutError:
     #     return f"Unable to Fill on element"
 
-    await page.fill("input[name='username']", "testuser")
-    await page.fill("input[name='password']", "testpass")
-    await page.click(
-        "form.form-login button[type='submit'], form.form-login input[type='submit']"
-    )
+    await page.fill("#inputUsername", "testuser")
+    await page.fill("#inputPassword", "testpass")
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+    try:
+        async with page.expect_navigation(timeout=5_000):
+            await page.click(
+                "button[type=submit]",
+                strict=False,
+                timeout=5_000,
+            )
+    except PlaywrightTimeoutError:
+        print("Unable to click on element 'button[type=submit]'")
+    print("Clicked element 'button[type=submit]'")
+    #    await page.click("button[type=submit]")
     await page.wait_for_load_state("networkidle")
     content = await page.content()
     print("Content: ", content)

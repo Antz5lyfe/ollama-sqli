@@ -84,5 +84,5 @@ class ClickTool(BaseBrowserTool):
                     timeout=self.playwright_timeout,
                 )
         except PlaywrightTimeoutError:
-            return f"Unable to click on element '{selector}'"
+            return f"Unable to click on element '{selector}'. If you are filling in a form, check that you have filled in all required fields."
         return f"Clicked element '{selector}'"

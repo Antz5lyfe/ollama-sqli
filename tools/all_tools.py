@@ -9,7 +9,7 @@ from langchain_core.tools import Tool
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from typing import Annotated
+from typing import Annotated, Union
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from langgraph.prebuilt.chat_agent_executor import AgentStateWithStructuredResponse
@@ -24,7 +24,9 @@ class PentestState(AgentStateWithStructuredResponse):
     should_terminate: bool
     reason: str
     url: str
-    attempts: Annotated[list[dict[str, str]], add]
+    attempts: list[dict[str, str]]
+    recommendation: dict
+    successful_payload: Union[None, dict[str, str]]
 
 
 search = GoogleSerperAPIWrapper()
