@@ -24,7 +24,7 @@ class PentestState(AgentStateWithStructuredResponse):
     should_terminate: bool
     reason: str
     url: str
-    attempts: list[dict[str, str]]
+    attempts: list[dict[str, Union[dict, str]]]
     recommendation: dict
     successful_payload: Union[None, dict[str, str]]
 
@@ -38,7 +38,7 @@ search_tool = Tool(
 
 
 def playwright_tools():
-    async_browser = create_async_playwright_browser(headless=False)  # headful mode
+    async_browser = create_async_playwright_browser(headless=True)  # headful mode
     toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=async_browser)
     return toolkit.get_tools()
 
@@ -96,7 +96,6 @@ requests_tools = RequestsToolkit(
 
 file_management_tools = FileManagementToolkit(
     root_dir=str("sandbox"),
-    selected_tools=["read_file", "list_directory", "file_search"],
 ).get_tools()
 
 
@@ -119,10 +118,7 @@ def get_attempts(state: Annotated[PentestState, InjectedState]) -> int:
 
 async def scanner_tools():
     return (
-        (await get_mcp_tools("scanner_mcp.json"))
-        + [search_tool]
-        + playwright_tools()
-        + file_management_tools
+        (await get_mcp_tools("scanner_mcp.json")) + [search_tool] + playwright_tools()
     )
 
 
@@ -132,3 +128,7 @@ async def planner_tools():
 
 def attacker_tools():
     return playwright_tools() + requests_tools
+
+
+def report_writer_tools():
+    return file_management_tools + [search_tool]

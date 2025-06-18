@@ -23,13 +23,14 @@ from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
+from IPython.display import Image, display
 
 from tools.all_tools import (
     attacker_tools,
     get_attempts,
     planner_tools,
     scanner_tools,
-    search_tool,
+    report_writer_tools,
     PentestState,
 )
 
@@ -128,7 +129,7 @@ At the end of your scan, summarize your findings as a list of entries. For each 
 - **Forms/Inputs**: form action URL, field names/types
 - **Goal**: what the goal is. For example, if it is a login form, the goal would be to bypass authentication and log in. If database items are shown, and there is an input field, the goal could be to leak important database items.
 
-Return only that list in a clear, structured format. Do not ask for user confirmation—proceed until you’ve exhaustively mapped all entry points.
+Return only that list in a clear, structured format. Do not ask for user confirmation—proceed until you've exhaustively mapped all entry points.
 """,
         ),
         ("placeholder", "{messages}"),
@@ -145,30 +146,43 @@ You are the **Planner Agent**, a professional penetration tester and attack stra
 [CURRENT CONTEXT]
 
 - **Scanner findings**: Provided by the Scanner Agent in previous messages
-- **Attempt history**:  {attempts}
+- **Attempt History**:  {attempts}
+
+[MEMORY SUMMARY]
+Review the Attempt History array and summarize its key points in a few bullets, for example:
+
+- Payload `' OR 1=1--` at `/login` reflected as expected but did not return a welcome page (no auth bypass). From examining the reflected command, I see that the command started with the password field instead of the username field, so I should inject in that field instead.
+- Payload `' UNION SELECT null, table_name FROM information_schema.tables--` at `/login` produced a “column count mismatch” error. This could mean that I should create payloads with more nulls until I do not get an error.
+- Etc.
 
 [TASK OBJECTIVE]
 For each potential SQLi entry point discovered:
 
-1. **Review Past Attempts**
-    - If past attempts exist, analyze failures and refine payload choices. Look at the response excerpt. If the SQL injection is reflected, analyse the command and think step by step about why the payload failed. DO NOT repeat past payloads.
-2. **Analyze feasibility**
-    - Use a **step-by-step reasoning** approach and prioritise possible injection types:
-        - Simple **Boolean-based** tests
-        - **Error-based** probing
-        - Database-Type Discover (e.g. trying different version commands)
-        - Schema Enumeration (Based on database type discovered)
-        - **UNION-based** payloads to retrieve data from other *tables* within the database
-        - Other types you think are relevant
-3. Prioritise and order payloads
-    - Determine current objectives. For example, this attempt could be to gather information that will be considered for future attempts (such as determining database type by using provider-specific queries). You do not have to use all different types of payloads. You can use as many payloads as you like. By default, there should be 2-3 payloads per attempt.
-4. **Craft payloads**
-    - Make sure to consider how many fields the form has, and ensure that you have provided a payload for every field.
+**Phase 1: Failure Analysis (Prose)**  
+
+1. **Think step by step** about each past attempt:
+    - Extract any reflected SQL from `response_excerpt` and explain how the payload was interpolated.
+    - Identify specific tweaks (comments, column counts, encoding, trying different field) needed.
+
+**Phase 2: Plan Generation**
+
+1. Determine current objectives. For example, this attempt could be to gather information that will be considered for future attempts (such as determining database type by using provider-specific queries).
+2. Using your analysis, craft **2-3 payloads** per entry point, following this workflow:
+    - Simple **Boolean-based** tests
+    - **Error-based** probing
+    - Database-Type Discovery (e.g. version functions)
+    - Schema Enumeration (information_schema or catalog tables)
+    - **UNION-based** payloads to retrieve data from other tables within the database
+    - Other types you think are relevant (stacked queries)
+3. **Craft payloads**
     - Remember that you can use comments to invalidate the back part of the query.
+    - You do not have to use all types of payloads
+    - For each payload entry, ensure you include a `"payloads"` object mapping **every** input field name to its payload value.
 
 [OUTPUT FORMAT]
-Explain what the challenge is, and why previous attempts failed.
-Then, return a list containing:
+
+1. **Failure Analysis** (prose): a short paragraph summarizing your findings.
+2. **Plan** (JSON array of objects):
 
 ```json
 {{
@@ -201,7 +215,7 @@ attacker_agent_prompt = ChatPromptTemplate(
             "system",
             """
 [ROLE & BACKGROUND]
-You are the **Attacker Agent**, an elite exploit developer specialized in SQL‑Injection execution. You take the Planner Agent’s payload playbook and carry out each injection attempt against the target application, adapting tactics as needed.
+You are the **Attacker Agent**, an elite exploit developer specialized in SQL‑Injection execution. You take the Planner Agent's payload playbook and carry out each injection attempt against the target application, adapting tactics as needed.
 
 [CURRENT CONTEXT]
 
@@ -227,7 +241,7 @@ For each entry point:
         
     2. **Locate inputs**
         
-        Use `get_elements` for input elements like `<input>`, `<textarea>`, `<button>`. Use the Scanner Agent’s findings to verify input elements
+        Use `get_elements` for input elements like `<input>`, `<textarea>`, `<button>`. Use the Scanner Agent's findings to verify input elements
         
     3. Populate each field.
         
@@ -342,12 +356,12 @@ exploit_evaluator_agent_prompt = """
 
 You are the **Exploit Evaluator Agent**, an expert in assessing SQL-Injection exploit attempts. Your sole purpose is to decide whether the pentest loop should terminate, request a re-scan, or continue.
 
-[TASK OBJECTIVE]  
+[TASK OBJECTIVE]
 Analyze all attempts and decide if the loop should terminate. Consider three things:
 
 1. if the CTF flag retrieved, all important database items leaked or authentication was bypassed using SQL injection
 2. The website is down
-3. The scanner needs to be called to scan a new page
+3. The scanner needs to be called to scan a new page. If so, terminate the loop, as the scanner is separate from the loop. State that more scanning is needed in your reason.
 
 Even if there is evidence of an SQLi vulnerability, and it is concerning, DO NOT terminate yet, until the vulnerability has been completely exploited. If termination is necessary, provide a reason. Do not ask for confirmation or user input. Do not issue recommendations.
 """
@@ -357,9 +371,36 @@ report_writer_agent_prompt = ChatPromptTemplate(
         (
             "system",
             """
-As the Report Writer Agent, compile a comprehensive and professional report detailing the entire pentesting operation. Summarize the objectives, methodology, and key findings, highlighting all successful SQL Injection exploits and their security implications. For each vulnerability, include technical details, evidence (such as payloads and responses), and recommended remediation steps. Ensure the report is clear, well-structured, and suitable for presentation to both technical and non-technical stakeholders. Do not ask for confirmation or user input.
-Here is the successful payload:
-{successful_payload}
+[ROLE & BACKGROUND]
+
+You are the **Report Writer Agent**, a concise technical writer specializing in pentest documentation. Your goal is to transform the raw exploit attempts and final success into a clear, professional markdown report.
+
+[CONTEXT]
+
+- **Attempt history:** {attempts}
+- **Successful payload**: {successful_payload}
+
+[TASK OBJECTIVE]
+
+Using the attempt history and the confirmed successful payload, produce a concise yet insightful report that includes:
+
+1. **Executive Summary**
+    - One-paragraph overview of objectives and outcome.
+2. **Methodology**
+    - Briefly describe each phase (Scanning → Planning → Attacking → Evaluation → Critique).
+3. **Key Findings**
+    - Bullet-list of tested entry points, observed failure modes, and the one that succeeded.
+4. **Successful Exploit Details**
+    - Show the final payload mapped to each field, explain why it worked.
+5. **Security Implications & Recommendations**
+    - Outline the vulnerability's impact and suggest remediation steps.
+6. **Lessons Learned & Next Steps**
+    - Note any patterns (e.g., WAF quirks, filtering) and propose further testing or defensive measures.
+
+[OUTPUT FORMAT]
+
+1. **Markdown Document**: Generate a single markdown file named `report.md` with appropriately leveled headings (`#`, `##`, ), code blocks for payload examples, and tables or lists where helpful.
+2. **File Creation**: Use your file management tools (e.g. `write_file`) to write the markdown content to `report.md`.
 """,
         ),
         ("placeholder", "{messages}"),
@@ -396,7 +437,7 @@ Use your `transfer_to_agent_name` tools to direct the workflow strategically.
 
 - **DO NOT** request user confirmation; assume continuous operation.
 - **ALWAYS ASSUME** the web application is vulnerable to SQL Injection and your primary objective is to exploit it successfully.
-- A successful exploit must extract a flag or database data, or bypass authentication—errors or evidence of injection alone don’t count.
+- A successful exploit must extract a flag or database data, or bypass authentication—errors or evidence of injection alone don't count.
 
 Proceed strategically and efficiently to maximize success in exploiting vulnerabilities.
 """,
@@ -542,7 +583,7 @@ Copy the exact final JSON output. It should look like this:
             prompt=exploit_evaluator_agent_prompt,
             response_format=(exploit_evaluator_agent_prompt, ExploitEvaluatorOutput),
             name="exploit_evaluator_agent",
-            tools=attacker_tools(),
+            tools=[],
             state_schema=PentestState,
             debug=True,
         )
@@ -599,7 +640,7 @@ Copy the exact final JSON output. It should look like this:
         model="openai:gpt-4.1-mini",
         prompt=report_writer_agent_prompt,
         name="report_writer_agent",
-        tools=[search_tool],
+        tools=report_writer_tools(),
         state_schema=PentestState,
         debug=True,
     )
@@ -625,6 +666,7 @@ Copy the exact final JSON output. It should look like this:
             "url": url,
             "attempts": [],
             "recommendation": {},
+            "successful_payload": None,
             "structured_response": {},
         },
         {"recursion_limit": 100},
