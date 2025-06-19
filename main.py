@@ -78,6 +78,14 @@ class AttackerOutput(TypedDict):
     )
 
 
+class PlannerOutput(TypedDict):
+    """Final output of the Agent"""
+
+    final_output: dict[str, Union[str, list]] = Field(
+        description="The exact final json output of the Agent"
+    )
+
+
 class CriticOutput(TypedDict):
     """Final JSON output of the Agent"""
 
@@ -113,23 +121,45 @@ You are the **Scanner Agent**, a seasoned reconnaissance specialist tasked with 
 2. Attempt to conduct error based SQL Injection on forms to test if they are vulnerable.
     - If SQL is reflected, state the full SQL command.
 
+[CRAWLING FLOW]
+
+1. **Start at the Target URL**
+    - Load the page with Playwright.
+    - Use `extract_html` or `get_elements` to find forms and input fields
+    - Use `extract_hyperlinks` to extract links
+2. **Filter & Follow Promising Links**
+    - From the list of links, select those whose text or URL path suggests a data-entry form or authentication page.
+    - Navigate to each selected link (repeat steps 1–2 on that page).
+3. **Map Endpoints on Every Page**
+    
+    For each visited page:
+    
+    - Identify all endpoints (GET & POST) and any query or form inputs.
+    - Locate every HTML form or input element.
+    - Record status codes, response contents, and any parameter reflection or error messages.
+
 [MORE TOOLS USAGE INFORMATION]
 
-- **ffuf**: use the wordlist at C:\\Users\\user1\\Documents\\internship\\project\\sandbox\\wordlist.txt to fuzz directories, parameters, and paths. use retrieve_ffuf_information to get usage information
-- **fetch**: search for information and extract HTML. cannot POST, can only GET
-- **requests:** probe each discovered endpoint for parameter reflection, status codes, and basic error messages. you can also inspect the raw HTML source of the site for information. note that the POST tool can only send data in JSON, and does not support form encoded data, and so may not work for sending form values.
-- **Playwright**: look for input fields and other elements that can be exploited. use the fill_tool to fill in form values and submit. extract_html can be used to look through the HTML source code of the website
+- **Playwright**:
+    - `extract_hyperlinks` → collect links
+    - `navigate_browser` → visit pages in the links
+    - `get_elements` → find `<form>`, `<input>`, `<textarea>` OR `extract_html` to look through the HTML source code of the website
+    - `fill_element` to fill in forms and `click_element` to click buttons to submit forms
+- **ffuf**: fuzz directories/parameters with `/Users/javiertan/internship/agentic-sqli/sandbox/wordlist.txt`
+- **fetch**: search for information. Can only only GET, cannot POST
+- **requests:** note that the POST tool can only send data in JSON, and does not support form encoded data, and so may not work for sending form values.
 
 [EXPECTED OUTPUT]
-At the end of your scan, summarize your findings as a list of entries. For each entry include:
+Once crawling is complete, return a list of all entry points discovered. For each, include:
 
-- **Endpoint**: full URL and HTTP method
-- **Parameters**: names and example values
-- **Reflection/Error**: whether input is reflected, and any error text. if input is reflected, state the full sql command
-- **Forms/Inputs**: form action URL, field names/types
-- **Goal**: what the goal is. For example, if it is a login form, the goal would be to bypass authentication and log in. If database items are shown, and there is an input field, the goal could be to leak important database items.
+- **Page URL**: URL of the page with the input fields/form
+- **Endpoint**: full URL + HTTP method
+- **Parameters**: names + example values
+- **Reflection/Error**: yes/no; if yes, include full SQL command fragment
+- **Forms/Inputs**: form action URL + field names/types
+- **Goal**: e.g. “bypass login,” “leak database items”
 
-Return only that list in a clear, structured format. Do not ask for user confirmation—proceed until you've exhaustively mapped all entry points.
+Return only that list in a clear, structured format. Do not ask for user confirmation—crawl until you’ve exhaustively mapped all entry points.
 """,
         ),
         ("placeholder", "{messages}"),
@@ -167,7 +197,8 @@ For each potential SQLi entry point discovered:
 **Phase 2: Plan Generation**
 
 1. Determine current objectives. For example, this attempt could be to gather information that will be considered for future attempts (such as determining database type by using provider-specific queries).
-2. Using your analysis, craft **2-3 payloads** per entry point, following this workflow:
+2. Using your analysis, craft **3-4 payloads** per entry point. Here are some possible SQL injection types:
+    - Simple comment based bypass (username: admin' --)
     - Simple **Boolean-based** tests
     - **Error-based** probing
     - Database-Type Discovery (e.g. version functions)
@@ -178,29 +209,34 @@ For each potential SQLi entry point discovered:
     - Remember that you can use comments to invalidate the back part of the query.
     - You do not have to use all types of payloads
     - For each payload entry, ensure you include a `"payloads"` object mapping **every** input field name to its payload value.
-
+    - The Attacker Agent cannot send POST requests, only navigate to a page and fill in a form. The endpoint should be the form page and the payload should only have the fields in the form
+    
 [OUTPUT FORMAT]
 
 1. **Failure Analysis** (prose): a short paragraph summarizing your findings.
 2. **Plan** (JSON array of objects):
 
 ```json
-{{
-  "entry_point": "<URL & method>",
-  "payload_sequence": [
+[
     {{
-      "type": "<boolean|union|…>",
-      "payloads": {{
-        "<field_name_1>": "<payload for field 1>",
-        "<field_name_2>": "<payload for field 2>",
-        …           : …
-      }},
-      "reason": "<rationale>"
+        "entry_point": "<URL>",
+        "page_url": "<URL of the page with the form>",
+        "payload_sequence": [
+            {{
+            "type": "<boolean|union|…>",
+            "payloads": {{
+                "<field_name_1>": "<payload for field 1>",
+                "<field_name_2>": "<payload for field 2>",
+                …           : …
+            }},
+            "reason": "<rationale>"
+            }},
+            …
+        ],
+        "justification": "<brief summary of approach>"
     }},
     …
-  ],
-  "justification": "<brief summary of approach>"
-}}
+]
 ```
 
 **Important:** Each `payload_sequence` entry must include a `payloads` object that maps **every** input field name (as discovered by the Scanner Agent for this entry point) to its corresponding payload string. Keys in `payloads` must exactly match the field names.
@@ -219,12 +255,13 @@ You are the **Attacker Agent**, an elite exploit developer specialized in SQL‑
 
 [CURRENT CONTEXT]
 
-- **Plans**: Payload Sequences provided by the Planner Agent
+- **Plans from Planner Agent**: {payloads}
+- **Recommendation from Critic Agent**: {recommendation}
 
 [TASK OBJECTIVE]
 For each entry point:
 
-1. Execute each **payload** in order.
+1. Execute each **payload** from the Planner Agent and Critic Agent in order.
 2. Use **Playwright** first, before trying other methods
 3. **Capture Outcomes**
     - Record HTTP status code, any reflected input or error text, and a short excerpt of the page response.
@@ -237,7 +274,7 @@ For each entry point:
 - **Playwright (Main tool)**
     1. **Load the target page containing the form**
         
-        Use `navigate_browser`
+        Use `navigate_browser` to navigate to `page_url`
         
     2. **Locate inputs**
         
@@ -267,7 +304,8 @@ Return an array of objects, for each payload tested:
 ```json
 [
   {{
-    "entry_point":"<URL & method>",
+    "entry_point":"<URL>",
+    "page_url": "<URL of the page with the form>",
     "payloads": {{
       "<field_name_1>": "<payload for field 1>",
       "<field_name_2>": "<payload for field 2>",
@@ -318,7 +356,8 @@ After your reasoning, output **only** the following JSON object (no extra text):
     {{
       "analysis": [
         {{
-          "entry_point": "<URL & method>",
+          "entry_point": "<URL>",
+          "page_url": "<URL of the page with the form>",
           "payloads": {{
             "<field_name_1>": "<payload for field 1>",
             "<field_name_2>": "<payload for field 2>",
@@ -458,15 +497,53 @@ async def main():
     )
 
     # --- Subgraph for planner -> attacker -> exploit evaluator ---
-
-    planner_agent = create_react_agent(
-        model="openai:o4-mini",
-        prompt=planner_agent_prompt,
-        name="planner_agent",
-        tools=await planner_tools(),
-        state_schema=PentestState,
-        debug=True,
-    )
+    async def planner(state: PentestState):
+        planner_agent = create_react_agent(
+            model="openai:o4-mini",
+            prompt=planner_agent_prompt,
+            name="planner_agent",
+            tools=await planner_tools(),
+            state_schema=PentestState,
+            response_format=(
+                """
+    Copy the exact final JSON output. It should look like this:
+    ```json
+    {
+        final_output: [
+            {
+                "entry_point": "...",
+                "page_url": "...",
+                "payload_sequence": [
+                    {
+                        "type": "...",
+                        "payloads": {
+                            "<field_name_1>": "...",
+                            "<field_name_2>": "...",
+                            …           : …
+                        },
+                        "reason": "..."
+                    },
+                    …
+                ],
+                "justification": "..."
+            }
+        ]
+    }
+    ```
+    """,
+                PlannerOutput,
+            ),
+            debug=True,
+        )
+        resp = await planner_agent.ainvoke(state)
+        if "final_output" not in resp["structured_response"] or not isinstance(
+            resp["structured_response"]["final_output"], list
+        ):
+            raise ValueError("Planner agent did not return payloads")
+        return {
+            "messages": [resp["messages"][-1]],
+            "payloads": resp["structured_response"]["final_output"],
+        }
 
     async def attacker(state: PentestState):
         attacker_agent = create_react_agent(
@@ -482,7 +559,8 @@ Copy the exact final JSON output. It should look like this:
 {
     final_output: [
         {
-            "entry_point":"<URL & method>",
+            "entry_point":"<URL>",
+            "page_url": "<URL of the page with the form>",
             "payloads": {
                 "<field_name_1>": "<payload for field 1>",
                 "<field_name_2>": "<payload for field 2>",
@@ -529,7 +607,8 @@ Copy the exact final JSON output. It should look like this:
     "final_output": {
         "analysis": [
             {
-                "entry_point": "<URL & method>",
+                "entry_point": "<URL>",
+                "page_url": "<URL of the page with the form>",
                 "payloads": {
                     "<field_name_1>": "<payload for field 1>",
                     "<field_name_2>": "<payload for field 2>",
@@ -565,7 +644,7 @@ Copy the exact final JSON output. It should look like this:
         for analysis_entry in resp["structured_response"]["final_output"]["analysis"]:
             for attempt_entry in c:
                 if (
-                    analysis_entry["entry_point"] == attempt_entry["entry_point"]
+                    analysis_entry["page_url"] == attempt_entry["page_url"]
                     and analysis_entry["payloads"] == attempt_entry["payloads"]
                 ):
                     attempt_entry.update(analysis_entry)
@@ -620,7 +699,7 @@ Copy the exact final JSON output. It should look like this:
             return "critic_agent"
 
     pentest_subgraph = StateGraph(PentestState)
-    pentest_subgraph.add_node("planner_agent", planner_agent)
+    pentest_subgraph.add_node("planner_agent", planner)
     pentest_subgraph.add_node("attacker_agent", attacker)
     pentest_subgraph.add_node("critic_agent", critic)
     pentest_subgraph.add_node("exploit_evaluator_agent", exploit_evaluator)
@@ -667,6 +746,7 @@ Copy the exact final JSON output. It should look like this:
             "attempts": [],
             "recommendation": {},
             "successful_payload": None,
+            "payloads": [],
             "structured_response": {},
         },
         {"recursion_limit": 100},

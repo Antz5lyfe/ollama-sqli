@@ -27,6 +27,7 @@ class PentestState(AgentStateWithStructuredResponse):
     attempts: list[dict[str, Union[dict, str]]]
     recommendation: dict
     successful_payload: Union[None, dict[str, str]]
+    payloads: list
 
 
 search = GoogleSerperAPIWrapper()
@@ -38,7 +39,7 @@ search_tool = Tool(
 
 
 def playwright_tools():
-    async_browser = create_async_playwright_browser(headless=True)  # headful mode
+    async_browser = create_async_playwright_browser(headless=False)  # headful mode
     toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=async_browser)
     return toolkit.get_tools()
 
