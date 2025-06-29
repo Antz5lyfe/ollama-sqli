@@ -177,3 +177,5 @@ cython_debug/
 
 mcp.json
 *mcp.json
+
+.vscode

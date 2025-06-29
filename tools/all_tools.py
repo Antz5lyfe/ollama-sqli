@@ -1,3 +1,6 @@
+from operator import add
+from typing import Annotated, Union
+
 from langchain.tools.retriever import create_retriever_tool
 from langchain_community.agent_toolkits import FileManagementToolkit
 from langchain_community.agent_toolkits.openapi.toolkit import RequestsToolkit
@@ -5,18 +8,15 @@ from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.tools.playwright.utils import create_async_playwright_browser
 from langchain_community.utilities import GoogleSerperAPIWrapper
 from langchain_community.utilities.requests import TextRequestsWrapper
-from langchain_core.tools import Tool
+from langchain_core.tools import Tool, tool
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from typing import Annotated, Union
-from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from langgraph.prebuilt.chat_agent_executor import AgentStateWithStructuredResponse
 
 from mcp_client import get_mcp_tools
 from playwright_tools.custom_playwright_toolkit import PlayWrightBrowserToolkit
-from operator import add
 
 
 class PentestState(AgentStateWithStructuredResponse):
@@ -77,17 +77,6 @@ sqli_rag_tool = rag(
     ],
     "retrieve_sqli_information",
     "Search and return information about SQL Injection and payloads from SQL Injection Cheat Sheets.",
-)
-
-ffuf_rag_tool = rag(
-    [
-        "https://github.com/ffuf/ffuf/wiki",
-        "https://medium.com/quiknapp/fuzz-faster-with-ffuf-c18c031fc480",
-        "https://www.freecodecamp.org/news/web-security-fuzz-web-applications-using-ffuf/",
-        "https://medium.com/@NiaziSec/mastering-ffuf-the-full-toolkit-3e7266dcced9",
-    ],
-    "retrieve_ffuf_information",
-    "Search and return information about FFUF usage",
 )
 
 requests_tools = RequestsToolkit(

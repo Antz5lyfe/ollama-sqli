@@ -1,8 +1,6 @@
 import sys
 from typing import TypedDict, Union
 
-from langchain_openai import ChatOpenAI
-
 if len(sys.argv) < 2:
     print("Usage: python main.py <url>")
     print("Please provide the target URL as the first argument.")
@@ -17,21 +15,20 @@ import warnings
 import nest_asyncio
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
 from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
-from pydantic import BaseModel, Field
-from langchain_core.prompts import ChatPromptTemplate
-from IPython.display import Image, display
+from pydantic import Field
 
 from tools.all_tools import (
+    PentestState,
     attacker_tools,
     get_attempts,
     planner_tools,
-    scanner_tools,
     report_writer_tools,
-    PentestState,
+    scanner_tools,
 )
 
 nest_asyncio.apply()
