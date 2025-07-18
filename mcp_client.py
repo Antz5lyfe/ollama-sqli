@@ -3,10 +3,15 @@ import json
 from dotenv import load_dotenv
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_openai import ChatOpenAI
+# from langchain_ollama import ChatOllama
+from langchain_ollama.chat_models import ChatOllama
+
 
 load_dotenv()
 
-model = ChatOpenAI(model="gpt-4o")
+# model = ChatOpenAI(model="gpt-4o")
+# model = ChatOllama(model="mistral:7b-instruct")
+model=ChatOllama(model="qwen3:14b")
 
 
 def load_mcp_servers_from_json(json_path):

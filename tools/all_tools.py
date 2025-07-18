@@ -1,5 +1,9 @@
 from operator import add
 from typing import Annotated, Union
+import os
+from langchain_community.vectorstores import Chroma
+import json
+from langchain_core.documents import Document
 
 from langchain.tools.retriever import create_retriever_tool
 from langchain_community.agent_toolkits import FileManagementToolkit
@@ -14,6 +18,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.prebuilt import InjectedState
 from langgraph.prebuilt.chat_agent_executor import AgentStateWithStructuredResponse
+from langchain_ollama import OllamaEmbeddings
 
 from mcp_client import get_mcp_tools
 from playwright_tools.custom_playwright_toolkit import PlayWrightBrowserToolkit
@@ -43,7 +48,7 @@ def playwright_tools():
     toolkit = PlayWrightBrowserToolkit.from_browser(async_browser=async_browser)
     return toolkit.get_tools()
 
-
+"""
 def rag(urls: list[str], name: str, description: str):
     docs = [WebBaseLoader(url).load() for url in urls]
 
@@ -60,8 +65,66 @@ def rag(urls: list[str], name: str, description: str):
     retriever = vectorstore.as_retriever()
     retriever_tool = create_retriever_tool(retriever, name, description)
     return retriever_tool
+"""
 
+def rag(json_path: str, name: str, description: str):
+    # Create a persistent directory for the vector store
+    persist_directory = "vector_store"
+    os.makedirs(persist_directory, exist_ok=True)
+    
+    print("Starting RAG initialization...")
+    
+    # Initialize embeddings
+    print("Initializing Ollama embeddings...")
+    embeddings = OllamaEmbeddings(
+        model="qwen3:14b",
+        base_url="http://localhost:11434"
+    )
+    print("Ollama embeddings initialized...")
+    
+    # Try to load existing vector store
+    print("Checking for existing vector store...")
+    vectorstore = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
+    
+    # If the store is empty, we need to create it
+    if vectorstore._collection.count() == 0:
+        print("Creating new vector store from local JSON...")
 
+        # Load from local JSON file
+        with open(json_path, "r", encoding="utf-8") as f:
+            raw_docs = json.load(f)
+
+        docs_list = [
+            Document(page_content=doc["content"], metadata=doc.get("metadata", {}))
+            for doc in raw_docs
+        ]
+        print(f"Loaded {len(docs_list)} documents from {json_path}")
+
+        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            chunk_size=100, chunk_overlap=50
+        )
+        doc_splits = text_splitter.split_documents(docs_list)
+        print(f"Split into {len(doc_splits)} chunks...")
+
+        # Process documents in smaller batches
+        batch_size = 50
+        for i in range(0, len(doc_splits), batch_size):
+            batch = doc_splits[i:i + batch_size]
+            print(f"Processing batch {i//batch_size + 1} of {(len(doc_splits) + batch_size - 1)//batch_size}...")
+            vectorstore.add_documents(batch)
+            
+        # Persist the vector store
+        vectorstore.persist()
+        print("Vector store created and persisted...")
+    else:
+        print(f"Loaded existing vector store with {vectorstore._collection.count()} documents")
+    
+    retriever = vectorstore.as_retriever()
+    retriever_tool = create_retriever_tool(retriever, name, description)
+    print("RAG initialization complete!")
+    return retriever_tool
+
+"""
 sqli_rag_tool = rag(
     [
         "https://book.hacktricks.wiki/en/pentesting-web/sql-injection/index.html",
@@ -77,6 +140,14 @@ sqli_rag_tool = rag(
     ],
     "retrieve_sqli_information",
     "Search and return information about SQL Injection and payloads from SQL Injection Cheat Sheets.",
+)
+"""
+
+# Offline RAG using local JSON
+sqli_rag_tool = rag(
+    json_path="sqli_docs.json",  # JSON file generated ahead of time
+    name="retrieve_sqli_information",
+    description="Search and return information about SQL Injection and payloads from SQL Injection Cheat Sheets.",
 )
 
 requests_tools = RequestsToolkit(

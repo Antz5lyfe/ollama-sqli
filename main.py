@@ -22,6 +22,10 @@ from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
 from pydantic import Field
 
+# from langchain_community.chat_models import ChatOllama
+from langchain_ollama.chat_models import ChatOllama
+
+
 from tools.all_tools import (
     PentestState,
     attacker_tools,
@@ -41,7 +45,7 @@ def _set_if_undefined(var: str):
         os.environ[var] = getpass.getpass(f"Please provide your {var}")
 
 
-_set_if_undefined("OPENAI_API_KEY")
+# _set_if_undefined("OPENAI_API_KEY")
 
 
 class ExploitEvaluatorOutput(TypedDict):
@@ -485,7 +489,9 @@ Proceed strategically and efficiently to maximize success in exploiting vulnerab
 
 async def main():
     scanner_agent = create_react_agent(
-        model="openai:gpt-4.1-mini",
+        # model="openai:gpt-4.1-mini",
+        # model=ChatOllama(model="mistral:7b-instruct"),
+        model=ChatOllama(model="qwen3:14b"),
         prompt=scanner_agent_prompt,
         name="scanner_agent",
         tools=await scanner_tools(),
@@ -496,7 +502,9 @@ async def main():
     # --- Subgraph for planner -> attacker -> exploit evaluator ---
     async def planner(state: PentestState):
         planner_agent = create_react_agent(
-            model="openai:o4-mini",
+            # model="openai:o4-mini",
+            # model=ChatOllama(model="mistral:7b-instruct"),
+            model=ChatOllama(model="qwen3:14b"),
             prompt=planner_agent_prompt,
             name="planner_agent",
             tools=await planner_tools(),
@@ -504,6 +512,7 @@ async def main():
             response_format=(
                 """
     Copy the exact final JSON output. It should look like this:
+    CRITICAL: The value for 'final_output' MUST be a JSON list (inside square brackets []), even if there is only one item.
     ```json
     {
         final_output: [
@@ -532,6 +541,7 @@ async def main():
             ),
             debug=True,
         )
+        '''
         resp = await planner_agent.ainvoke(state)
         if "final_output" not in resp["structured_response"] or not isinstance(
             resp["structured_response"]["final_output"], list
@@ -541,10 +551,33 @@ async def main():
             "messages": [resp["messages"][-1]],
             "payloads": resp["structured_response"]["final_output"],
         }
+        '''
+        
+        resp = await planner_agent.ainvoke(state)
+        # Check if the response is valid
+        if "final_output" not in resp["structured_response"]:
+            raise ValueError("Planner agent did not return 'final_output'")
+
+        final_output = resp["structured_response"]["final_output"]
+
+        # if the model returned a dict instead of a list
+        if isinstance(final_output, dict):
+            final_output = [final_output]
+
+        # Ensure it's a list
+        if not isinstance(final_output, list):
+            raise ValueError("Planner agent did not return payloads in a valid list format")
+
+        return {
+            "messages": [resp["messages"][-1]],
+            "payloads": final_output, # Use the corrected variable
+        }
 
     async def attacker(state: PentestState):
         attacker_agent = create_react_agent(
-            model="openai:gpt-4.1-mini",
+            # model="openai:gpt-4.1-mini",
+            # model=ChatOllama(model="mistral:7b-instruct"),
+            model=ChatOllama(model="qwen3:14b"),
             prompt=attacker_agent_prompt,
             name="attacker_agent",
             tools=attacker_tools(),
@@ -591,7 +624,9 @@ Copy the exact final JSON output. It should look like this:
 
     async def critic(state: PentestState):
         critic_agent = create_react_agent(
-            model="openai:gpt-4.1-mini",
+            # model="openai:gpt-4.1-mini",
+            # model=ChatOllama(model="mistral:7b-instruct"),
+            model=ChatOllama(model="qwen3:14b"),
             prompt=critic_agent_prompt,
             name="critic_agent",
             tools=await planner_tools(),
@@ -655,7 +690,9 @@ Copy the exact final JSON output. It should look like this:
 
     async def exploit_evaluator(state: PentestState):
         exploit_evaluator_agent = create_react_agent(
-            model="openai:gpt-4.1-mini",
+            # model="openai:gpt-4.1-mini",
+            # model=ChatOllama(model="mistral:7b-instruct"),
+            model=ChatOllama(model="qwen3:14b"),
             prompt=exploit_evaluator_agent_prompt,
             response_format=(exploit_evaluator_agent_prompt, ExploitEvaluatorOutput),
             name="exploit_evaluator_agent",
@@ -713,7 +750,9 @@ Copy the exact final JSON output. It should look like this:
     pentest_agents = pentest_subgraph.compile(name="pentest_agents")
 
     report_writer_agent = create_react_agent(
-        model="openai:gpt-4.1-mini",
+        # model="openai:gpt-4.1-mini",
+        # model=ChatOllama(model="mistral:7b-instruct"),
+        model=ChatOllama(model="qwen3:14b"),
         prompt=report_writer_agent_prompt,
         name="report_writer_agent",
         tools=report_writer_tools(),
@@ -722,7 +761,9 @@ Copy the exact final JSON output. It should look like this:
     )
 
     supervisor = create_supervisor(
-        model=init_chat_model("openai:gpt-4.1-mini"),
+        # model=init_chat_model("openai:gpt-4.1-mini"),
+        # model=ChatOllama(model="mistral:7b-instruct"),
+        model=ChatOllama(model="qwen3:14b"),
         agents=[scanner_agent, pentest_agents, report_writer_agent],
         prompt=supervisor_agent_prompt,
         add_handoff_back_messages=True,

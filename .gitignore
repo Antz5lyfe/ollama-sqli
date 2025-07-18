@@ -179,3 +179,6 @@ mcp.json
 *mcp.json
 
 .vscode
+
+# Vector Store
+/vector_store
